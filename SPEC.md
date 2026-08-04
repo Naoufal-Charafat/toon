@@ -2,10 +2,6 @@
 
 The TOON specification has moved to a dedicated repository: [github.com/toon-format/spec](https://github.com/toon-format/spec)
 
-## Current Version
-
-**Version 1.4** (2025-11-05)
-
 ## Quick Links
 
 - **[Full Specification](https://github.com/toon-format/spec/blob/main/SPEC.md)** - Complete technical specification

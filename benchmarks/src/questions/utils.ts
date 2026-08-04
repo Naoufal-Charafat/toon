@@ -1,5 +1,5 @@
-import type { AnswerType, NormalizationOptions } from '../normalize'
-import type { Question } from '../types'
+import type { AnswerType, NormalizationOptions } from '../normalize.ts'
+import type { Question } from '../types.ts'
 
 // Constants for sampling strides
 export const SAMPLE_STRIDES = {
@@ -10,11 +10,11 @@ export const SAMPLE_STRIDES = {
   METRIC_FIELD: 3,
   REPO_FIELD: 7,
   EVENT_LOG_FIELD: 5,
+  FLAG_FIELD: 3,
+  CONTACT_FIELD: 3,
 } as const
 
-/**
- * ID Generator
- */
+/** ID Generator */
 export function* createIdGenerator(): Generator<string, never, never> {
   let id = 1
   while (true) {
@@ -22,9 +22,7 @@ export function* createIdGenerator(): Generator<string, never, never> {
   }
 }
 
-/**
- * Question Builder class for fluent question creation
- */
+/** Question Builder class for fluent question creation */
 export class QuestionBuilder {
   private question: Partial<Question> = {}
 
@@ -72,9 +70,7 @@ export class QuestionBuilder {
   }
 }
 
-/**
- * Rotate through question generators
- */
+/** Rotate through question generators */
 export function rotateQuestions<T>(
   items: T[],
   generators: ((item: T, getId: () => string) => Question)[],

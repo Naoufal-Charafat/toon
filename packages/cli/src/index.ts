@@ -1,114 +1,73 @@
-import type { CommandDef } from 'citty'
-import type { Delimiter } from '../../toon/src'
-import type { InputSource } from './types'
+import type { ArgsDef, CommandDef } from 'citty'
+import type { InputSource } from './types.ts'
 import * as path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { consola } from 'consola'
-import { DEFAULT_DELIMITER, DELIMITERS } from '../../toon/src'
-import { name, version } from '../package.json' with { type: 'json' }
-import { decodeToJson, encodeToToon } from './conversion'
-import { detectMode } from './utils'
+import { DEFAULT_DELIMITER } from '../../toon/src/index.ts'
+import { assertValidDelimiter } from '../../toon/src/shared/validation.ts'
+import pkg from '../package.json' with { type: 'json' }
+import { decodeToJson, encodeToToon } from './conversion.ts'
+import { formatError } from './format-error.ts'
+import { detectMode } from './utils.ts'
 
-export const mainCommand: CommandDef<{
+const { name, version } = pkg
+
+const args: ArgsDef = {
   input: {
-    type: 'positional'
-    description: string
-    required: false
-  }
+    type: 'positional',
+    description: 'Input file path (omit or use "-" to read from stdin)',
+    required: false,
+  },
   output: {
-    type: 'string'
-    description: string
-    alias: string
-  }
+    type: 'string',
+    description: 'Output file path',
+    alias: 'o',
+  },
   encode: {
-    type: 'boolean'
-    description: string
-    alias: string
-  }
+    type: 'boolean',
+    description: 'Encode JSON to TOON (auto-detected by default)',
+    alias: 'e',
+  },
   decode: {
-    type: 'boolean'
-    description: string
-    alias: string
-  }
+    type: 'boolean',
+    description: 'Decode TOON to JSON (auto-detected by default)',
+    alias: 'd',
+  },
   delimiter: {
-    type: 'string'
-    description: string
-    default: string
-  }
+    type: 'string',
+    description: 'Delimiter for rows and inline arrays: comma (,), tab (\\t), or pipe (|)',
+    default: ',',
+  },
   indent: {
-    type: 'string'
-    description: string
-    default: string
-  }
-  lengthMarker: {
-    type: 'boolean'
-    description: string
-    default: false
-  }
+    type: 'string',
+    description: 'Indentation size',
+    default: '2',
+  },
   strict: {
-    type: 'boolean'
-    description: string
-    default: true
-  }
+    type: 'boolean',
+    description: 'Strict decode validation (disable with --no-strict)',
+    default: true,
+  },
   stats: {
-    type: 'boolean'
-    description: string
-    default: false
-  }
-}> = defineCommand({
+    type: 'boolean',
+    description: 'Show token statistics',
+    default: false,
+  },
+  verbose: {
+    type: 'boolean',
+    description: 'Show full stack traces and cause chains for errors',
+    default: false,
+  },
+} as const
+
+export const mainCommand: CommandDef<ArgsDef> = defineCommand({
   meta: {
     name,
-    description: 'TOON CLI — Convert between JSON and TOON formats',
+    description: 'TOON CLI – Convert between JSON and TOON',
     version,
   },
-  args: {
-    input: {
-      type: 'positional',
-      description: 'Input file path (omit or use "-" to read from stdin)',
-      required: false,
-    },
-    output: {
-      type: 'string',
-      description: 'Output file path',
-      alias: 'o',
-    },
-    encode: {
-      type: 'boolean',
-      description: 'Encode JSON to TOON (auto-detected by default)',
-      alias: 'e',
-    },
-    decode: {
-      type: 'boolean',
-      description: 'Decode TOON to JSON (auto-detected by default)',
-      alias: 'd',
-    },
-    delimiter: {
-      type: 'string',
-      description: 'Delimiter for arrays: comma (,), tab (\\t), or pipe (|)',
-      default: ',',
-    },
-    indent: {
-      type: 'string',
-      description: 'Indentation size',
-      default: '2',
-    },
-    lengthMarker: {
-      type: 'boolean',
-      description: 'Use length marker (#) for arrays',
-      default: false,
-    },
-    strict: {
-      type: 'boolean',
-      description: 'Enable strict mode for decoding',
-      default: true,
-    },
-    stats: {
-      type: 'boolean',
-      description: 'Show token statistics',
-      default: false,
-    },
-  },
+  args,
   async run({ args }) {
     const input = args.input
 
@@ -117,17 +76,13 @@ export const mainCommand: CommandDef<{
       : { type: 'file', path: path.resolve(input) }
     const outputPath = args.output ? path.resolve(args.output) : undefined
 
-    // Parse and validate indent
-    const indent = Number.parseInt(args.indent || '2', 10)
-    if (Number.isNaN(indent) || indent < 0) {
+    const indentSize = Number.parseInt(args.indent || '2', 10)
+    if (Number.isNaN(indentSize) || indentSize < 0) {
       throw new Error(`Invalid indent value: ${args.indent}`)
     }
 
-    // Validate delimiter
     const delimiter = args.delimiter || DEFAULT_DELIMITER
-    if (!(Object.values(DELIMITERS)).includes(delimiter as Delimiter)) {
-      throw new Error(`Invalid delimiter "${delimiter}". Valid delimiters are: comma (,), tab (\\t), pipe (|)`)
-    }
+    assertValidDelimiter(delimiter)
 
     const mode = detectMode(inputSource, args.encode, args.decode)
 
@@ -136,9 +91,8 @@ export const mainCommand: CommandDef<{
         await encodeToToon({
           input: inputSource,
           output: outputPath,
-          delimiter: delimiter as Delimiter,
-          indent,
-          lengthMarker: args.lengthMarker === true ? '#' : false,
+          delimiter,
+          indentSize,
           printStats: args.stats === true,
         })
       }
@@ -146,14 +100,16 @@ export const mainCommand: CommandDef<{
         await decodeToJson({
           input: inputSource,
           output: outputPath,
-          indent,
+          indentSize,
           strict: args.strict !== false,
         })
       }
     }
     catch (error) {
-      consola.error(error)
-      process.exit(1)
+      consola.error(formatError(error, { isVerbose: args.verbose === true }))
+      // `process.exit` would discard whatever stdout has still buffered, which
+      // truncates a piped conversion partway through
+      process.exitCode = 1
     }
   },
 })

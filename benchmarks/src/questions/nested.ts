@@ -1,11 +1,9 @@
-import type { Order } from '../datasets'
-import type { Question } from '../types'
-import { QUESTION_LIMITS, QUESTION_THRESHOLDS } from '../constants'
-import { QuestionBuilder, rotateQuestions, SAMPLE_STRIDES } from './utils'
+import type { Order } from '../datasets.ts'
+import type { Question } from '../types.ts'
+import { QUESTION_LIMITS, QUESTION_THRESHOLDS } from '../constants.ts'
+import { QuestionBuilder, rotateQuestions, SAMPLE_STRIDES } from './utils.ts'
 
-/**
- * Generate nested (orders) questions
- */
+/** Generate nested (orders) questions */
 export function generateNestedQuestions(orders: Order[], getId: () => string): Question[] {
   const questions: Question[] = []
 

@@ -2,6 +2,7 @@ import * as fsp from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import process from 'node:process'
+import { Readable } from 'node:stream'
 import { runMain } from 'citty'
 import { mainCommand } from '../src/index'
 
@@ -75,4 +76,22 @@ async function writeFiles(baseDir: string, files: FileRecord): Promise<void> {
       await fsp.writeFile(filePath, contents, 'utf8')
     }),
   )
+}
+
+export function mockStdin(input: string): () => void {
+  // Real stdin hands over bytes, and the strict UTF-8 check depends on getting them
+  const mockStream = Readable.from([new TextEncoder().encode(input)])
+
+  const originalStdin = process.stdin
+  Object.defineProperty(process, 'stdin', {
+    value: mockStream,
+    writable: true,
+  })
+
+  return () => {
+    Object.defineProperty(process, 'stdin', {
+      value: originalStdin,
+      writable: true,
+    })
+  }
 }

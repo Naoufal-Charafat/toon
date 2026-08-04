@@ -1,5 +1,15 @@
-import { COMMA, LIST_ITEM_MARKER } from '../constants'
-import { isBooleanOrNullLiteral } from './literal-utils'
+import type { Delimiter } from '../types.ts'
+import { COMMENT_MARKER, DEFAULT_DELIMITER, DELIMITERS, LIST_ITEM_MARKER } from '../constants.ts'
+import { isBooleanOrNullLiteral } from './literal-utils.ts'
+
+const NUMERIC_LIKE_PATTERN = /^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i
+
+/** Narrows an arbitrary delimiter option, shared by the library and the CLI so both report it alike. */
+export function assertValidDelimiter(delimiter: string): asserts delimiter is Delimiter {
+  if (!(Object.values(DELIMITERS) as string[]).includes(delimiter)) {
+    throw new TypeError(`Invalid delimiter ${JSON.stringify(delimiter)}. Valid delimiters are: comma (,), tab (\\t), pipe (|)`)
+  }
+}
 
 /**
  * Checks if a key can be used without quotes.
@@ -25,60 +35,54 @@ export function isValidUnquotedKey(key: string): boolean {
  * - Contains control characters (newlines, tabs, etc.)
  * - Contains the active delimiter
  * - Starts with a list marker (hyphen)
+ * - Starts with a comment marker (#)
  */
-export function isSafeUnquoted(value: string, delimiter: string = COMMA): boolean {
+export function isSafeUnquoted(value: string, delimiter: string = DEFAULT_DELIMITER): boolean {
   if (!value) {
     return false
   }
 
-  if (value !== value.trim()) {
+  // Only space and tab force quoting, unlike host `trim()`, which also strips other Unicode whitespace
+  if (/^[ \t]|[ \t]$/.test(value)) {
     return false
   }
 
-  // Check if it looks like any literal value (boolean, null, or numeric)
   if (isBooleanOrNullLiteral(value) || isNumericLike(value)) {
     return false
   }
 
-  // Check for colon (always structural)
   if (value.includes(':')) {
     return false
   }
 
-  // Check for quotes and backslash (always need escaping)
   if (value.includes('"') || value.includes('\\')) {
     return false
   }
 
-  // Check for brackets and braces (always structural)
   if (/[[\]{}]/.test(value)) {
     return false
   }
 
-  // Check for control characters (newline, carriage return, tab - always need quoting/escaping)
-  if (/[\n\r\t]/.test(value)) {
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001F]/.test(value)) {
     return false
   }
 
-  // Check for the active delimiter
   if (value.includes(delimiter)) {
     return false
   }
 
-  // Check for hyphen at start (list marker)
   if (value.startsWith(LIST_ITEM_MARKER)) {
+    return false
+  }
+
+  if (value.startsWith(COMMENT_MARKER)) {
     return false
   }
 
   return true
 }
 
-/**
- * Checks if a string looks like a number.
- *
- * @remarks
- * Match numbers like `42`, `-3.14`, `1e-6`, `05`, etc.
- */
 function isNumericLike(value: string): boolean {
-  return /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value) || /^0\d+$/.test(value)
+  return NUMERIC_LIKE_PATTERN.test(value)
 }

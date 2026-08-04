@@ -1,6 +1,6 @@
 // #region JSON types
 
-import type { Delimiter, DelimiterKey } from './constants'
+import type { Delimiter, DelimiterKey } from './constants.ts'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonObject = { [Key in string]: JsonValue } & { [Key in string]?: JsonValue | undefined }
@@ -13,10 +13,50 @@ export type JsonValue = JsonPrimitive | JsonObject | JsonArray
 
 export type { Delimiter, DelimiterKey }
 
+/**
+ * A function that transforms or filters values during encoding.
+ *
+ * Called for every value (root, object properties, array elements) during the encoding process.
+ * Similar to `JSON.stringify`'s replacer, but with path tracking.
+ *
+ * @param key - The property key or array index (as string). Empty string (`''`) for root value.
+ * @param value - The normalized `JsonValue` at this location.
+ * @param path - Array representing the path from root to this value.
+ *
+ * @returns The replacement value (will be normalized again), or `undefined` to omit.
+ *          For root value, returning `undefined` means "no change" (don't omit root).
+ *
+ * @example
+ * ```ts
+ * // Remove password fields
+ * const replacer = (key, value) => {
+ *   if (key === 'password') return undefined
+ *   return value
+ * }
+ *
+ * // Add timestamps
+ * const replacer = (key, value, path) => {
+ *   if (path.length === 0 && typeof value === 'object' && value !== null) {
+ *     return { ...value, _timestamp: Date.now() }
+ *   }
+ *   return value
+ * }
+ * ```
+ */
+export type EncodeReplacer = (
+  key: string,
+  value: JsonValue,
+  path: readonly (string | number)[],
+) => unknown
+
 export interface EncodeOptions {
   /**
    * Number of spaces per indentation level.
    * @default 2
+   */
+  indentSize?: number
+  /**
+   * @deprecated Use `indentSize` instead.
    */
   indent?: number
   /**
@@ -25,14 +65,15 @@ export interface EncodeOptions {
    */
   delimiter?: Delimiter
   /**
-   * Optional marker to prefix array lengths in headers.
-   * When set to `#`, arrays render as [#N] instead of [N].
-   * @default false
+   * A function to transform or filter values during encoding.
+   * Called for the root value and every nested property/element.
+   * Return `undefined` to omit properties/elements (root cannot be omitted).
+   * @default undefined
    */
-  lengthMarker?: '#' | false
+  replacer?: EncodeReplacer
 }
 
-export type ResolvedEncodeOptions = Readonly<Required<EncodeOptions>>
+export type ResolvedEncodeOptions = Readonly<Required<Omit<EncodeOptions, 'replacer' | 'indent'>>> & Pick<EncodeOptions, 'replacer'>
 
 // #endregion
 
@@ -43,6 +84,10 @@ export interface DecodeOptions {
    * Number of spaces per indentation level.
    * @default 2
    */
+  indentSize?: number
+  /**
+   * @deprecated Use `indentSize` instead.
+   */
   indent?: number
   /**
    * When true, enforce strict validation of array lengths and tabular row counts.
@@ -51,7 +96,38 @@ export interface DecodeOptions {
   strict?: boolean
 }
 
-export type ResolvedDecodeOptions = Readonly<Required<DecodeOptions>>
+export type ResolvedDecodeOptions = Readonly<Required<Omit<DecodeOptions, 'indent'>>>
+
+/** Options for streaming decode operations. */
+export type DecodeStreamOptions = DecodeOptions
+
+// #endregion
+
+// #region Streaming decoder types
+
+export type JsonStreamEvent
+  = | { type: 'startObject' }
+    | { type: 'endObject' }
+    | { type: 'startArray', length: number }
+    | { type: 'endArray' }
+    | { type: 'key', key: string }
+    | { type: 'primitive', value: JsonPrimitive }
+
+// #endregion
+
+// #region Header field types
+
+/**
+ * One entry of a tabular header's field list.
+ *
+ * @remarks
+ * A leaf field (no children) maps to one row cell; a nested field group
+ * carries its subfields and materializes a nested object per row.
+ */
+export interface FieldNode {
+  name: string
+  children?: FieldNode[]
+}
 
 // #endregion
 
@@ -61,8 +137,9 @@ export interface ArrayHeaderInfo {
   key?: string
   length: number
   delimiter: Delimiter
-  fields?: string[]
-  hasLengthMarker: boolean
+  fields?: FieldNode[]
+  /** Keyed tabular header `[N:<delim?>]` – N declares the entry count. */
+  keyed?: boolean
 }
 
 export interface ParsedLine {

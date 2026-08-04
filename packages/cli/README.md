@@ -1,8 +1,8 @@
 # @toon-format/cli
 
-Command-line tool for converting between JSON and TOON formats.
+Command-line tool for converting JSON to TOON and back, with token analysis and streaming support.
 
-[TOON (Token-Oriented Object Notation)](https://toonformat.dev) is a compact, human-readable serialization format designed for passing structured data to Large Language Models with significantly reduced token usage.
+[TOON (Token-Oriented Object Notation)](https://toonformat.dev) is a compact, human-readable encoding of the JSON data model that minimizes tokens for LLM input. The CLI lets you test conversions, analyze token savings, and integrate TOON into shell pipelines with stdin/stdout support.
 
 ## Installation
 
@@ -51,6 +51,9 @@ echo '{"name": "Ada"}' | toon
 
 # Decode from stdin
 cat data.toon | toon --decode
+
+# Show token savings
+toon data.json --stats
 ```
 
 ## Options
@@ -60,77 +63,19 @@ cat data.toon | toon --decode
 | `-o, --output <file>` | Output file path (prints to stdout if omitted) |
 | `-e, --encode` | Force encode mode (overrides auto-detection) |
 | `-d, --decode` | Force decode mode (overrides auto-detection) |
-| `--delimiter <char>` | Array delimiter: `,` (comma), `\t` (tab), `\|` (pipe) |
+| `--delimiter <char>` | Array delimiter: `,` (comma), tab character, `\|` (pipe). Pass tab as `$'\t'` in bash/zsh |
 | `--indent <number>` | Indentation size (default: `2`) |
-| `--length-marker` | Add `#` prefix to array lengths (e.g., `items[#3]`) |
 | `--stats` | Show token count estimates and savings (encode only) |
-| `--no-strict` | Disable strict validation when decoding |
+| `--no-strict` | Skip decode validation (array counts, indentation, header delimiter); last-write-wins on duplicate keys |
+| `--verbose` | Show full stack traces and cause chains for errors (default: `false`) |
 
-## Advanced Examples
-
-### Token Statistics
-
-Show token savings when encoding:
-
-```bash
-toon data.json --stats -o output.toon
-```
-
-Example output:
-```
-✓ Encoded to TOON
-  Input:  15,145 tokens (JSON)
-  Output:  8,745 tokens (TOON)
-  Saved:   6,400 tokens (42.3% reduction)
-```
-
-### Alternative Delimiters
-
-#### Tab-separated (often more token-efficient)
-
-```bash
-toon data.json --delimiter "\t" -o output.toon
-```
-
-#### Pipe-separated with length markers
-
-```bash
-toon data.json --delimiter "|" --length-marker -o output.toon
-```
-
-### Lenient Decoding
-
-Skip validation for faster processing:
-
-```bash
-toon data.toon --no-strict -o output.json
-```
-
-### Stdin Workflows
-
-```bash
-# Convert API response to TOON
-curl https://api.example.com/data | toon --stats
-
-# Process large dataset
-cat large-dataset.json | toon --delimiter "\t" > output.toon
-
-# Chain with other tools
-jq '.results' data.json | toon > filtered.toon
-```
-
-## Why Use the CLI?
-
-- **Quick conversions** between formats without writing code
-- **Token analysis** to see potential savings before sending to LLMs
-- **Pipeline integration** with existing JSON-based workflows
-- **Flexible formatting** with delimiter and indentation options
+For token statistics output, delimiter guidance, lenient decoding, decode error rendering, and streaming behavior, see the [CLI documentation](https://toonformat.dev/cli/).
 
 ## Related
 
-- [@toon-format/toon](https://www.npmjs.com/package/@toon-format/toon) - JavaScript/TypeScript library
-- [Full specification](https://github.com/toon-format/spec) - Complete format documentation
-- [Website](https://toonformat.dev) - Interactive examples and guides
+- [@toon-format/toon](https://www.npmjs.com/package/@toon-format/toon) – JavaScript/TypeScript library
+- [Full specification](https://github.com/toon-format/spec) – Complete format documentation
+- [Website](https://toonformat.dev) – Interactive examples and guides
 
 ## License
 

@@ -1,4 +1,5 @@
-import type { InputSource } from './types'
+import type { InputSource } from './types.ts'
+import { createReadStream } from 'node:fs'
 import * as fsp from 'node:fs/promises'
 import * as path from 'node:path'
 import process from 'node:process'
@@ -8,13 +9,11 @@ export function detectMode(
   encodeFlag?: boolean,
   decodeFlag?: boolean,
 ): 'encode' | 'decode' {
-  // Explicit flags take precedence
   if (encodeFlag)
     return 'encode'
   if (decodeFlag)
     return 'decode'
 
-  // Auto-detect based on file extension
   if (input.type === 'file') {
     if (input.path.endsWith('.json'))
       return 'encode'
@@ -22,7 +21,6 @@ export function detectMode(
       return 'decode'
   }
 
-  // Default to encode
   return 'encode'
 }
 
@@ -76,4 +74,40 @@ function readFromStdin(): Promise<string> {
     stdin.once('end', onEnd)
     stdin.resume()
   })
+}
+
+export async function* readLinesFromSource(source: InputSource, strict: boolean): AsyncIterable<string> {
+  const stream = source.type === 'stdin'
+    ? process.stdin
+    : createReadStream(source.path)
+
+  // Node's own string decoding substitutes U+FFFD, which a strict decoder MUST NOT do
+  const decoder = new TextDecoder('utf-8', { fatal: strict })
+  let buffer = ''
+
+  for await (const chunk of stream) {
+    buffer += decodeUtf8(decoder, chunk as Uint8Array)
+    let index: number
+
+    while ((index = buffer.indexOf('\n')) !== -1) {
+      const line = buffer.slice(0, index)
+      buffer = buffer.slice(index + 1)
+      yield line
+    }
+  }
+
+  buffer += decodeUtf8(decoder)
+
+  if (buffer.length > 0) {
+    yield buffer
+  }
+}
+
+function decodeUtf8(decoder: TextDecoder, chunk?: Uint8Array): string {
+  try {
+    return chunk === undefined ? decoder.decode() : decoder.decode(chunk, { stream: true })
+  }
+  catch {
+    throw new Error('Input is not valid UTF-8. Pass --no-strict to replace ill-formed bytes')
+  }
 }
